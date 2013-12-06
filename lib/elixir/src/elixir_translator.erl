@@ -43,7 +43,7 @@ translate_each({ '=', Meta, [Left, Right] }, S) ->
 
 %% Containers
 
-translate_each({ C, _, _ } = Original, S) when C == '{}'; C == '<<>>' ->
+translate_each({ C, _, _ } = Original, S) when C == '{}'; C == '<<>>'; C == '%[]' ->
   elixir_literal:translate(Original, S);
 
 %% Blocks and scope rewriters
@@ -301,6 +301,12 @@ translate_each({'receive', Meta, [KV] }, S) when is_list(KV) ->
 
 translate_each({ Kind, Meta, Args }, S) when is_list(Args), (Kind == lc) orelse (Kind == bc) ->
   translate_comprehension(Meta, Kind, Args, S);
+
+%% Maps support
+
+translate_each({Kind, Meta, Args}, S) when (Kind == '=>') orelse (Kind == ':=' ) ->
+  {[Key, Value], TS} = translate_args(Args, S),
+  { { map_field(Kind), ?line(Meta), Key, Value }, TS };
 
 %% Super
 
@@ -637,6 +643,11 @@ translate_args(Args, #elixir_scope{context=match} = S) ->
 translate_args(Args, S) ->
   { TArgs, { SC, SV } } = lists:mapfoldl(fun translate_arg/2, {S, S}, Args),
   { TArgs, umergea(SV, SC) }.
+
+%% map field helpers
+
+map_field('=>') -> map_field_assoc;
+map_field(':=') -> map_field_exact.
 
 %% __op__ helpers
 

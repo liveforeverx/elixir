@@ -543,7 +543,7 @@ defmodule Module do
     end
   end
 
-  defp simplify_signature({ :=, _, [_, right] }, line, i) do
+  defp simplify_signature({ :':=', _, [_, right] }, line, i) do
     simplify_signature(right, line, i)
   end
 

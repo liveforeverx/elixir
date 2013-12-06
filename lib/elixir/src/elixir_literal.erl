@@ -14,6 +14,10 @@ translate({ '<<>>', Meta, Args }, S) when is_list(Args) ->
       { TArgs, umergec(SV, SC) }
   end;
 
+translate({ '%[]', Meta, Args }, S) when is_list(Args) ->
+  { TArgs, SE } = translate_args(Args, S),
+  { { map, ?line(Meta), TArgs }, SE };
+
 translate({ '{}', Meta, Args }, S) when is_list(Args) ->
   { TArgs, SE } = translate_args(Args, S),
   { { tuple, ?line(Meta), TArgs }, SE };

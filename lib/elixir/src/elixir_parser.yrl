@@ -8,6 +8,7 @@ Nonterminals
   arrow_op_eol range_op_eol than_op_eol default_op_eol match_op_eol
   when_op_eol in_op_eol inc_op_eol
   open_paren close_paren empty_paren
+  open_map_bracket
   open_bracket close_bracket
   open_curly close_curly
   open_bit close_bit
@@ -20,7 +21,8 @@ Nonterminals
   call_args_no_parens_kw_expr call_args_no_parens_kw_comma call_args_no_parens_kw
   dot_op dot_alias dot_identifier dot_op_identifier dot_do_identifier
   dot_paren_identifier dot_bracket_identifier
-  var list bit_string tuple
+  var list bit_string tuple maps
+  maps_arg map_op
   do_block fn_eol do_eol end_eol block_eol block_item block_list
   .
 
@@ -34,7 +36,8 @@ Terminals
   range_op in_op inc_op when_op than_op default_op tail_op
   dual_op add_op mult_op exp_op two_op type_op stab_op
   'true' 'false' 'nil' 'do' eol ',' '.' '&'
-  '(' ')' '[' ']' '{' '}' '<<' '>>'
+  '(' ')' '%[' '[' ']' '{' '}' '<<' '>>'
+  '=>' ':='
   .
 
 Rootsymbol grammar.
@@ -194,6 +197,7 @@ base_expr -> number : ?exprs('$1').
 base_expr -> signed_number : { element(4, '$1'), meta('$1'), ?exprs('$1') }.
 base_expr -> list : element(1, '$1').
 base_expr -> tuple : '$1'.
+base_expr -> maps : '$1'.
 base_expr -> 'true' : ?id('$1').
 base_expr -> 'false' : ?id('$1').
 base_expr -> 'nil' : ?id('$1').
@@ -259,10 +263,12 @@ close_paren -> eol ')' : '$2'.
 
 empty_paren -> open_paren ')' : '$1'.
 
-open_bracket  -> '['     : '$1'.
-open_bracket  -> '[' eol : '$1'.
-close_bracket -> ']'     : '$1'.
-close_bracket -> eol ']' : '$2'.
+open_bracket  -> '['             : '$1'.
+open_bracket  -> '[' eol         : '$1'.
+open_map_bracket  -> '%['        : '$1'.
+open_map_bracket  -> '%[' eol    : '$1'.
+close_bracket -> ']'             : '$1'.
+close_bracket -> eol ']'         : '$2'.
 
 open_bit  -> '<<'     : '$1'.
 open_bit  -> '<<' eol : '$1'.
@@ -447,6 +453,17 @@ list -> open_bracket kw close_bracket : { '$2', ?line('$1') }.
 list -> open_bracket container_arg close_bracket : { ['$2'], ?line('$1') }.
 list -> open_bracket container_expr ',' container_args close_bracket : { ['$2'|'$4'], ?line('$1') }.
 
+% Maps
+
+maps -> open_map_bracket ']' : build_maps('$1', []).
+maps -> open_map_bracket maps_arg ']' : build_maps('$1', '$2').
+
+map_op -> '=>' : '$1'.
+map_op -> ':=' : '$1'.
+
+maps_arg -> expr map_op expr : build_maps_args('$2', ['$1', '$3'], []).
+maps_arg -> expr map_op expr ',' maps_arg : build_maps_args('$2', ['$1', '$3'], '$5').
+
 % Tuple
 
 tuple -> open_curly '}' : build_tuple('$1', []).
@@ -476,6 +493,8 @@ meta(Line, Counter) -> [{counter,Counter}|meta(Line)].
 meta(Line) when is_integer(Line) -> [{line,Line}];
 meta(Node) -> meta(?line(Node)).
 
+build_maps_args(Op, KeyValue, OtherArgs) ->
+    [{ ?id(Op), [{line,?line(Op)}], KeyValue} | OtherArgs].
 %% Operators
 
 build_op({ _Kind, Line, '/' }, { '&', _, [{ Kind, _, Atom } = Left] }, Right) when is_number(Right), is_atom(Atom), is_atom(Kind) ->
@@ -498,6 +517,9 @@ build_tuple(_Marker, [Left, Right]) ->
 
 build_tuple(Marker, Args) ->
   { '{}', meta(Marker), Args }.
+
+build_maps(Marker, Args) ->
+  { '%[]', [{line,?line(Marker)}], Args }.
 
 %% Blocks
 

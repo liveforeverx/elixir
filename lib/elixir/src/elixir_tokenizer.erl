@@ -77,6 +77,12 @@
 -define(match_op(T),
   T == $=).
 
+-define(assign_op(T1, T2),
+  T1 == $=, T2 == $>).
+
+-define(match_map_op(T1, T2),
+  T1 == $:, T2 == $=).
+
 -define(tail_op(T),
   T == $|).
 
@@ -232,6 +238,9 @@ tokenize([$.,T|Tail], Line, Scope, Tokens) when ?is_space(T) ->
 tokenize(".<<>>" ++ Rest, Line, Scope, Tokens) ->
   handle_call_identifier(Rest, Line, '<<>>', Scope, Tokens);
 
+tokenize([$.,$%,$[,$]|Rest], Line, Scope, Tokens) ->
+  handle_call_identifier(Rest, Line, '$[]', Scope, Tokens);
+
 tokenize([$.,T1,T2|Rest], Line, Scope, Tokens) when ?container(T1, T2) ->
   handle_call_identifier(Rest, Line, list_to_atom([T1, T2]), Scope, Tokens);
 
@@ -242,6 +251,10 @@ tokenize([$.,T1,T2,T3|Rest], Line, Scope, Tokens) when
   handle_call_identifier(Rest, Line, list_to_atom([T1, T2, T3]), Scope, Tokens);
 
 % ## Two Token Operators
+tokenize([$.,T1,T2|Rest], Line, Scope, Tokens) when
+    ?assign_op(T1, T2); ?match_map_op(T1, T2) ->
+  tokenize(Rest, Line, Scope, [{ list_to_atom([T1, T2]), Line }|Tokens]);
+
 tokenize([$.,T1,T2|Rest], Line, Scope, Tokens) when
     ?comp_op2(T1, T2); ?and_op(T1, T2); ?or_op(T1, T2); ?arrow_op(T1, T2);
     ?range_op(T1, T2); ?than_op(T1, T2); ?default_op(T1, T2); ?two_op(T1, T2);
@@ -319,6 +332,9 @@ tokenize(":..." ++ Rest, Line, Scope, Tokens) ->
 tokenize(":<<>>" ++ Rest, Line, Scope, Tokens) ->
   tokenize(Rest, Line, Scope, [{ atom, Line, '<<>>' }|Tokens]);
 
+tokenize([$:,$%,$[,$]|Rest], Line, Scope, Tokens) ->
+  tokenize(Rest, Line, Scope, [{ atom, Line, '%[]' }|Tokens]);
+
 tokenize([$:,T1,T2|Rest], Line, Scope, Tokens) when ?container(T1, T2) ->
   tokenize(Rest, Line, Scope, [{ atom, Line, list_to_atom([T1,T2]) }|Tokens]);
 
@@ -332,13 +348,13 @@ tokenize([$:,T1,T2,T3|Rest], Line, Scope, Tokens) when
 tokenize([$:,T1,T2|Rest], Line, Scope, Tokens) when
     ?comp_op2(T1, T2); ?and_op(T1, T2); ?or_op(T1, T2); ?arrow_op(T1, T2);
     ?range_op(T1, T2); ?than_op(T1, T2); ?default_op(T1, T2); ?two_op(T1, T2);
-    ?stab_op(T1, T2); ?type_op(T1, T2) ->
+    ?stab_op(T1, T2); ?type_op(T1, T2); ?assign_op(T1, T2) ->
   tokenize(Rest, Line, Scope, [{ atom, Line, list_to_atom([T1,T2]) }|Tokens]);
 
 % ## Single Token Operators
 tokenize([$:,T|Rest], Line, Scope, Tokens) when
     ?at_op(T); ?unary_op(T); ?dual_op(T); ?mult_op(T); ?comp_op(T);
-    ?match_op(T); ?tail_op(T); T == $. ->
+    ?tail_op(T); T == $. ->
   tokenize(Rest, Line, Scope, [{ atom, Line, list_to_atom([T]) }|Tokens]);
 
 % End of line
@@ -383,6 +399,10 @@ tokenize([T1,T2,T3|Rest], Line, Scope, Tokens) when ?exp_op3(T1, T2, T3) ->
   handle_op(Rest, Line, exp_op, list_to_atom([T1,T2,T3]), Scope, Tokens);
 
 % ## Containers + punctuation tokens
+tokenize([$%,$[|Rest], Line, Scope, Tokens) ->
+  Token = { '%[', Line },
+  handle_terminator(Rest, Line, Scope, Token, Tokens);
+
 tokenize([T,T|Rest], Line, Scope, Tokens) when T == $<; T == $> ->
   Token = { list_to_atom([T,T]), Line },
   handle_terminator(Rest, Line, Scope, Token, Tokens);
@@ -423,6 +443,11 @@ tokenize([T1,T2|Rest], Line, Scope, Tokens) when ?stab_op(T1, T2) ->
 tokenize([T1,T2|Rest], Line, Scope, Tokens) when ?type_op(T1, T2) ->
   handle_op(Rest, Line, type_op, list_to_atom([T1, T2]), Scope, Tokens);
 
+tokenize([T1,T2|Rest], Line, Scope, Tokens) when ?assign_op(T1, T2) ->
+  tokenize(Rest, Line, Scope, [{ list_to_atom([T1, T2]), Line }|Tokens]);
+
+tokenize([T1,T2|Rest], Line, Scope, Tokens) when ?match_map_op(T1, T2) ->
+  tokenize(Rest, Line, Scope, [{ list_to_atom([T1, T2]), Line }|Tokens]);
 % ## Single Token Operators
 
 %% Handle &1 and friends with special precedence.
@@ -857,6 +882,7 @@ check_terminator({ S, Line }, Terminators) when S == 'fn' ->
 check_terminator({ S, _ } = New, Terminators) when
     S == 'do';
     S == '(';
+    S == '%[';
     S == '[';
     S == '{';
     S == '<<' ->
@@ -866,6 +892,7 @@ check_terminator({ E, _ }, [{ S, _ }|Terminators]) when
     S == 'do', E == 'end';
     S == 'fn', E == 'end';
     S == '(',  E == ')';
+    S == '%[', E == ']';
     S == '[',  E == ']';
     S == '{',  E == '}';
     S == '<<', E == '>>' ->
@@ -897,6 +924,7 @@ sigil_terminator(O) -> O.
 terminator('fn') -> 'end';
 terminator('do') -> 'end';
 terminator('(')  -> ')';
+terminator('%[') -> ']';
 terminator('[')  -> ']';
 terminator('{')  -> '}';
 terminator('<<') -> '>>'.

@@ -196,6 +196,10 @@ defmodule Kernel.RecordRewriter do
     { { :block, line, args }, dict, res }
   end
 
+  defp optimize_expr({ :map, line, args }, module, dict) do
+    { { :map, line, args }, dict, { nil, [] } }
+  end
+
   defp optimize_expr({ :tuple, line, args }, module, dict) do
     { args, dict, args_res } = optimize_tuple_args(args, module, dict)
     args_res = if Enum.any?(args_res), do: args_res, else: nil

@@ -455,6 +455,19 @@ defimpl Inspect, for: Function do
   end
 end
 
+defimpl Inspect, for: Map do
+  def inspect(map, opts) do
+    surround_many("%[", :maps.to_list(map), "]", opts.limit, &map(&1, opts))
+  end
+
+  defp map({key, value}, opts) do
+    concat(
+      Kernel.inspect(key, opts) <> " => ",
+      Kernel.inspect(value, opts)
+    )
+  end
+end
+
 defimpl Inspect, for: PID do
   def inspect(pid, _opts) do
     "#PID" <> iolist_to_binary(:erlang.pid_to_list(pid))
